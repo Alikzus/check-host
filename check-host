@@ -1,10 +1,12 @@
 #!/bin/sh
 #
-# check-host -- check if one or several hosts are alive and use pushover to send
+# check-host -- check if one or several hosts are alive and use Pushover to send
 #               a notification upon a negative response
 #
 # Usage: check-host hostname
 #        check-host -f config-file
+#
+# Note: If called from as cronjob you would probably want to add "> /dev/null".
 #
 # Copyright (c) 2015-2016, Joel A. Nilsson <joel@alikzus.se>
 #
@@ -54,7 +56,7 @@ fault() {
 }
 
 say() {
-    echo "==> ${*}"
+    echo "\n==> ${*}"
 }
 
 usage() {
@@ -98,7 +100,8 @@ poke_master() {
 # send_msg $message
 send_msg() {
     # Pushover format: title message
-    /usr/local/bin/pushover "$(/bin/hostname -s)" "$1" > /dev/null
+    /usr/local/bin/pushover "$(/bin/hostname -s | perl -nle 'print "\u\L$_"')" \
+        "$1" > /dev/null
 }
 
 #===============================================================================
@@ -209,4 +212,4 @@ fi
 quit "Done"
 
 ################################################################################
-# Last Changed: 2016-09-09 15:18:01 CEST
+# Last Changed: 2016-09-10 17:47:44 CEST
