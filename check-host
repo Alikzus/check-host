@@ -5,6 +5,7 @@
 #
 # Usage: check-host hostname
 #        check-host -f config-file
+#        check-host -t config-file
 #
 # Note: If called from as cronjob you would probably want to add "> /dev/null".
 #
@@ -31,11 +32,28 @@ set -u
 trap "abort" HUP INT QUIT TERM
 
 ################################################################################
+# DEFAULT CONFIGURATION
+# Should be set with a configuration file, e.g. ~/check-host.conf
+################################################################################
+
+MASTER=""
+HOSTS=""
+
+USE_PUSHOVER=0
+PUSHOVER_TOKEN=""
+PUSHOVER_USER=""
+
+USE_TELEGRAM=0
+TELEGRAM_TOKEN=""
+TELEGRAM_CHAT_ID=""
+
+################################################################################
 # CONSTANTS
 ################################################################################
 
 NAME="check-host"
-_TMPDIR="/tmp/${NAME}"
+_HOST="$(/bin/hostname -s | perl -nle 'print "\u\L$_"')"
+_TMPDIR="/tmp/$NAME"
 
 ################################################################################
 # SUBROUTINES
@@ -61,10 +79,11 @@ say() {
 
 usage() {
     echo
-    echo "Usage: ${NAME} [-f] filename/host" >&2
+    echo "Usage: $NAME [-ft] filename/host" >&2
     echo
     echo "Options:"
-    echo "    -f    config file with hosts et cetera"
+    echo "  -f    config file with hosts et cetera"
+    echo "  -t    send a test notification using a config file"
     echo
     exit 1
 }
@@ -79,7 +98,7 @@ quit() {
 # ping_host $hostname $number-of-tries 
 ping_host() {
     tries=0
-    while [ ${tries} -lt "$2" ]; do
+    while [ $tries -lt "$2" ]; do
         /sbin/ping -c 1 -q "$1" > /dev/null 2<&1
         if [ $? -eq 0 ]; then
             got_response=1
@@ -93,9 +112,9 @@ ping_host() {
 }
 
 poke_master() {
-    if ! [ -z "${master}" ]; then
-        ping_host "${master}" 10
-        if [ "${got_response}" -eq 0 ]; then
+    if ! [ -z "$MASTER" ]; then
+        ping_host "$MASTER" 10
+        if [ "$got_response" -eq 0 ]; then
             say "The master is not responding"
         else
             quit "Nothing to be done"
@@ -107,9 +126,25 @@ poke_master() {
 
 # notify $message
 notify() {
-    # Pushover format: title message
-    /usr/local/bin/pushover "$(/bin/hostname -s | perl -nle 'print "\u\L$_"')" \
-        "$1" > /dev/null
+    message="$1"
+
+    if [ $USE_PUSHOVER -eq 1 ]; then
+        curl -s \
+            --form-string "token=$PUSHOVER_TOKEN" \
+            --form-string "user=$PUSHOVER_USER" \
+            --form-string "title=$_HOST" \
+            --form-string "message=$message" \
+            https://api.pushover.net/1/messages.json \
+            > /dev/null &
+    fi
+
+    if [ $USE_TELEGRAM -eq 1 ]; then
+        curl -s \
+            --data "chat_id=$TELEGRAM_CHAT_ID" \
+            --data-urlencode "text=${_HOST}, $message" \
+            "https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage" \
+            > /dev/null &
+    fi
 }
 
 #===============================================================================
@@ -117,7 +152,7 @@ notify() {
 check_response() {
     cache="${_TMPDIR}/$1"
     ping_host "$1" 60
-    if [ "${got_response}" -eq 0 ]; then
+    if [ $got_response -eq 0 ]; then
         no_response "$1"
     else
         response "$1"
@@ -125,31 +160,31 @@ check_response() {
 }
 
 no_response() {
-    if [ -f "${cache}" ]; then
-        count="$(cat "${cache}")"
+    if [ -f "$cache" ]; then
+        count="$(cat "$cache")"
 
-        if [ "${count}" -le 12 ]; then
+        if [ "$count" -le 12 ]; then
             time=60
-        elif [ "${count}" -gt 12 ] && [ "${count}" -le 18 ]; then
+        elif [ "$count" -gt 12 ] && [ "$count" -le 18 ]; then
             time=120
         else
             time=720
         fi
 
-        if [ "$(/usr/bin/find "${cache}" -mmin +${time})" ]; then
+        if [ "$(/usr/bin/find "$cache" -mmin +$time)" ]; then
             count=$((count + 1))
-            echo "${count}" > "${cache}"
+            echo "$count" > "$cache"
             notify "$1 is still NOT responding to pings"
         fi
     else
-        echo "1" > "${cache}"
+        echo "1" > "$cache"
         notify "$1 is NOT responding to pings"
     fi
 }
 
 response() {
-    if [ -f "${cache}" ]; then
-        /bin/rm "${cache}" | fault "Could NOT clear the cache"
+    if [ -f "$cache" ]; then
+        /bin/rm "$cache" | fault "Could NOT clear the cache"
         notify "$1 has started to respond to pings again"
     fi
 }
@@ -159,44 +194,50 @@ response() {
 ################################################################################
 
 if [ "$(/usr/bin/id -u)" -eq 0 ]; then
-    error "You should NOT run ${NAME} with root privileges"
+    error "You should NOT run $NAME with root privileges"
 fi
 
 file_is_specified=0
-master=""
-hosts=""
+test_mode=0
 
-while getopts 'f' arg; do
-    case ${arg} in
+while getopts 'f:t' arg; do
+    case $arg in
     f)  file_is_specified=1 ;;
+    t)  test_mode=1 ;;
     *)  usage ;;
     esac
 done
 
-if ! [ -d "${_TMPDIR}" ]; then
-    /bin/mkdir "${_TMPDIR}" | error "Could NOT create the temporary cache"
+if ! [ -d "$_TMPDIR" ]; then
+    /bin/mkdir "$_TMPDIR" | error "Could NOT create the temporary cache"
 fi
 
-if [ "${file_is_specified}" -eq 1 ]; then
+if [ $file_is_specified -eq 1 ] || [ $test_mode -eq 1 ]; then
     config_file="$2"
 
-    if [ -f "${config_file}" ]; then
+    if [ -f "$config_file" ]; then
         # shellcheck source=/dev/null
-        . "${config_file}"
+        . "$config_file"
     else
-        error "The config file ${config_file} does not exist"
+        error "The config file $config_file does not exist"
+    fi
+
+    if [ $test_mode -eq 1 ]; then
+        notify "A trick from Nakor"
+        quit "Test done"
     fi
 
     poke_master
 
-    if ! [ -z "${hosts}" ]; then
-        for host in ${hosts}; do
-            check_response "${host}"
+    if ! [ -z "$HOSTS" ]; then
+        for host in $HOSTS; do
+            check_response "$host"
         done
     else
         error "No hosts are defined"
     fi
-
+elif [ $file_is_specified -eq 0 ] || [ $test_mode -eq 1 ]; then
+    error "A configuration file shall be defined for use with test mode"
 else
     check_response "$1"
 fi
@@ -204,4 +245,4 @@ fi
 quit "Done"
 
 ################################################################################
-# Last Changed: 2016-09-11 09:34:32 CEST
+# Last Changed: 2016-09-11 17:46:32 CEST
