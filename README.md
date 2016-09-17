@@ -11,4 +11,4 @@ check-host -f config-file
 check-host -t config-file`
 ```
 
-**Note:** If called from as cronjob you would probably want to add "> /dev/null".
+**Note:** If called from crontab as a cronjob you would probably want to add ```> /dev/null```.
