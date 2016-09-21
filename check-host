@@ -125,12 +125,14 @@ ping_host() {
 
 poke_master() {
     if ! [ -z "$MASTER" ]; then
-        ping_host "$MASTER" 10
-        if [ "$got_response" -eq 0 ]; then
-            say "The master is not responding"
-        else
-            quit "Nothing to be done"
-        fi
+        for master in $MASTER; do
+            ping_host "$master" 10
+            if [ "$got_response" -eq 0 ]; then
+                say "The master is not responding"
+            else
+                quit "Nothing to be done"
+            fi
+        done
     else
         say "No master was defined"
     fi
@@ -259,4 +261,4 @@ fi
 quit "Done"
 
 ################################################################################
-# Last Changed: 2016-09-19 18:15:43 CEST
+# Last Changed: 2016-09-21 18:57:50 CEST
