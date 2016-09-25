@@ -7,7 +7,12 @@
 #        check-host -f config-file
 #        check-host -t config-file
 #
-# Note: If called from as cronjob you would probably want to add "> /dev/null".
+# Note: If called from crontab as a cronjob you would probably want to add
+#       "> /dev/null".
+#
+# Assumptions: The system is OpenBSD-stable or -current.
+#
+# Dependencies: cURL
 #
 # Copyright (c) 2015-2016, Joel A. Nilsson <joel@alikzus.se>
 #
@@ -36,16 +41,11 @@ trap "abort" HUP INT QUIT TERM
 # Should be set with a configuration file, e.g. ~/check-host.conf
 ################################################################################
 
-MASTER=""
+MASTERS=""
 HOSTS=""
 
-USE_PUSHOVER=0
 PUSHOVER_TOKEN=""
 PUSHOVER_USER=""
-
-USE_TELEGRAM=0
-TELEGRAM_TOKEN=""
-TELEGRAM_CHAT_ID=""
 
 ################################################################################
 # CONSTANTS
@@ -124,8 +124,8 @@ ping_host() {
 }
 
 poke_master() {
-    if ! [ -z "$MASTER" ]; then
-        for master in $MASTER; do
+    if ! [ -z "$MASTERS" ]; then
+        for master in $MASTERS; do
             ping_host "$master" 10
             if [ "$got_response" -eq 0 ]; then
                 say "The master is not responding"
@@ -142,23 +142,13 @@ poke_master() {
 notify() {
     message="$1"
 
-    if [ $USE_PUSHOVER -eq 1 ]; then
-        curl -s \
-            --form-string "token=$PUSHOVER_TOKEN" \
-            --form-string "user=$PUSHOVER_USER" \
-            --form-string "title=$_HOST" \
-            --form-string "message=$message" \
-            https://api.pushover.net/1/messages.json \
-            > /dev/null &
-    fi
-
-    if [ $USE_TELEGRAM -eq 1 ]; then
-        curl -s \
-            --data "chat_id=$TELEGRAM_CHAT_ID" \
-            --data-urlencode "text=${_HOST} -- $message" \
-            "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-            > /dev/null &
-    fi
+    curl -s \
+        --form-string "token=$PUSHOVER_TOKEN" \
+        --form-string "user=$PUSHOVER_USER" \
+        --form-string "title=$_HOST" \
+        --form-string "message=$message" \
+        https://api.pushover.net/1/messages.json \
+        > /dev/null &
 }
 
 #===============================================================================
@@ -261,4 +251,4 @@ fi
 quit "Done"
 
 ################################################################################
-# Last Changed: 2016-09-21 18:57:50 CEST
+# Last Changed: 2016-09-25 14:44:11 CEST
