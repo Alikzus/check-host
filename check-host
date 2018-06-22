@@ -97,7 +97,7 @@ quit() {
 #===============================================================================
 
 check_connectivity() {
-    if ! [ -z "$CHECKPOINT" ]; then
+    if [ ! -z "$CHECKPOINT" ]; then
         ping_host "$CHECKPOINT" 3
         if [ "$got_response" -eq 0 ]; then
             quit "No connectivity; cannot proceed"
@@ -111,8 +111,7 @@ check_connectivity() {
 ping_host() {
     tries=0
     while [ $tries -lt "$2" ]; do
-        /sbin/ping -c 1 -q "$1" > /dev/null 2<&1
-        if [ $? -eq 0 ]; then
+        if /sbin/ping -c 1 -q "$1"; then
             got_response=1
             break
         else
@@ -124,7 +123,7 @@ ping_host() {
 }
 
 poke_master() {
-    if ! [ -z "$MASTERS" ]; then
+    if [ ! -z "$MASTERS" ]; then
         for master in $MASTERS; do
             ping_host "$master" 10
             if [ "$got_response" -eq 0 ]; then
@@ -212,8 +211,8 @@ while getopts 'f:t' arg; do
     esac
 done
 
-if ! [ -d "$_TMPDIR" ]; then
-    /bin/mkdir "$_TMPDIR" | error "Could NOT create the temporary cache"
+if [ !  -d "$_TMPDIR" ]; then
+    /bin/mkdir "$_TMPDIR" || error "Could NOT create the temporary cache"
 fi
 
 check_connectivity
@@ -235,7 +234,7 @@ if [ $file_is_specified -eq 1 ] || [ $test_mode -eq 1 ]; then
 
     poke_master
 
-    if ! [ -z "$HOSTS" ]; then
+    if [ ! -z "$HOSTS" ]; then
         for host in $HOSTS; do
             check_response "$host"
         done
@@ -251,4 +250,4 @@ fi
 quit "Done"
 
 ################################################################################
-# Last Changed: 2016-09-25 14:44:11 CEST
+# Last Changed: 2018-06-22 11:04:14 CEST
